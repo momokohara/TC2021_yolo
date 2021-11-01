@@ -11,6 +11,7 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 from geometry_msgs.msg import Twist
 from std_srvs.srv import Trigger
+from sensor_msgs.msg import Bool
 from yolov5_pytorch_ros.msg import BoundingBox, BoundingBoxes
 
 class ObjectTracker():
@@ -21,9 +22,9 @@ class ObjectTracker():
         self.image_width = 640
         self.image_height = 480
 
-        self._pub_cmdvel = rospy.Publisher("/icart_mini/cmd_vel", Twist, queue_size=1)
-        #self._pub_cmdvel = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
-
+        # self._pub_cmdvel = rospy.Publisher("/icart_mini/cmd_vel", Twist, queue_size=1)
+        self._pub_cmdvel = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
+        self._pub_bool = rospy.Publisher("/whiteline_frag", Bool, queue_size=1)
 
     def _calculate_centroid_point(self, msg):
         point = False
@@ -67,18 +68,18 @@ class ObjectTracker():
 
     def _stop_threshold(self):
         stop_threshold = 48
-        not_stop_range = self.image_height - stop_threshold
-        # not_stop_range = stop_threshold
+        # not_stop_range = self.image_height - stop_threshold
+        not_stop_range = stop_threshold
         return not_stop_range
 
     def _move_zone(self):
-        if self.point[1] <= self._stop_threshold():
-        # if self.point[1] >= self._stop_threshold():
+        #if self.point[1] <= self._stop_threshold():
+        if self.point[1] >= self._stop_threshold():
             return True
 
     def _stop_zone(self):
-        if self.point[1] > self._stop_threshold():
-        #if self.point[1] < self._stop_threshold():
+        # if self.point[1] > self._stop_threshold():
+        if self.point[1] < self._stop_threshold():
             return True
 
     def _rotation_velocity(self):
@@ -87,8 +88,9 @@ class ObjectTracker():
             return 0.0
 
         half_width = self.image_width / 2.0
+        # pos_x_rate = (half_width - self.point[0]) / half_width
         pos_x_rate = (half_width - self.point[0]) / half_width
-        # pos_x_rate = pos_x_rate * -1
+        pos_x_rate = pos_x_rate * -1
         rot_vel = pos_x_rate * VELOCITY
         return rot_vel
     
@@ -100,6 +102,7 @@ class ObjectTracker():
         
         # print("center point calculate")
         cmd_vel = Twist()
+        bool = Bool()
         # print(type(self.point))
         # print(self.point)
         if type(self.point) == tuple:
@@ -108,13 +111,14 @@ class ObjectTracker():
                 print("forward")
             if self._stop_zone():
                 cmd_vel.linear.x = 0
+                bool.data = True
                 print("stay")
             cmd_vel.angular.z = self._rotation_velocity()
         else:
             cmd_vel.linear.x = 0
             cmd_vel.angular.z = self._rotation_velocity()
         self._pub_cmdvel.publish(cmd_vel)
-
+        self._pub_bool.publish(bool)
 
 if __name__ == '__main__':
     rospy.init_node('object_tracking')
